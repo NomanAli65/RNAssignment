@@ -1,10 +1,10 @@
 import axios from 'axios';
-import { BarCodeScanner } from 'expo-barcode-scanner';
 import { Camera } from 'expo-camera';
 import React, { Component } from 'react';
-import { View, Text, StyleSheet, Dimensions, Modal, Animated, Easing, Image } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Animated, TouchableOpacity } from 'react-native';
 import BottomSheet from 'reanimated-bottom-sheet';
 import SheetContent from './SheetContent';
+import SheetHeader from './SheetHeader';
 
 const { width, height } = Dimensions.get("window");
 
@@ -13,9 +13,11 @@ export default class Scanner extends Component {
         super(props);
         this.state = {
             permission: false,
-            detailsModal: false,
+            scanned: false,
             opacity: new Animated.Value(1),
-            data: []
+            data: [],
+            fetching: false,
+            sheetClosed: true
         };
     }
 
@@ -41,10 +43,9 @@ export default class Scanner extends Component {
     stopAnimation = () => {
         this.state.opacity.setValue(1);
         this.state.opacity.stopAnimation();
-        this.setState({ detailsModal: true });
     }
 
-    async componentDidMount() {
+    getPermission = async () => {
         const { status } = await Camera.requestPermissionsAsync();
         if (status == "granted") {
             this.setState({ permission: true });
@@ -52,14 +53,28 @@ export default class Scanner extends Component {
         else {
             this.setState({ permission: false })
         }
+    }
+
+    componentDidMount() {
+        this.getPermission();
         this.animateCorners();
     }
 
+    _BarCodeScanned = (result) => {
+        if (this.state.fetching || !this.state.sheetClosed)
+           return;
+         this.stopAnimation();
+         this.getDetails();
+    }
+
     getDetails = async () => {
+        this.setState({ fetching: true })
         try {
             var result = await axios.get("https://randomuser.me/api/?seed=%7Bbarcode-number");
             if (result.data && result.data.results.length > 0) {
-                this.setState({ data: result.data.results[0] })
+                this.setState({ data: result.data.results[0] }, () => {
+                    this.bottomSheet.snapTo(2)
+                })
             }
             else {
                 alert("Can't find the product")
@@ -67,10 +82,9 @@ export default class Scanner extends Component {
         } catch (error) {
             alert("Error occured")
         }
+        this.setState({ fetching: false })
 
     }
-
-
 
 
     render() {
@@ -82,26 +96,47 @@ export default class Scanner extends Component {
                         Scan QR code
                 </Text>
                 </View>
-                <View>
-                    {
-                        this.state.permission ?
+                {
+                    this.state.permission ?
+                        <View>
                             <Camera
                                 style={styles.camera}
                                 type="back"
-                                onBarCodeScanned={(result) => {
-                                    this.stopAnimation();
-                                }}
+                                onBarCodeScanned={this._BarCodeScanned}
                             >
                                 <View style={styles.imgContainer}>
-                                    <Animated.Image source={require("../assets/corners.png")} style={[styles.img, { opacity, tintColor: this.state.detailsModal ? "green" : "#fff" }]} />
+                                    <Animated.Image source={require("../assets/corners.png")} style={[styles.img, { opacity, tintColor: this.state.fetching ? "green" : "#fff" }]} />
                                 </View>
-                            </Camera> :
-                            <Text>Please enable camera permission to scan qr code</Text>
-                    }
-                </View>
+                            </Camera>
+                        </View>
+                        :
+                        <View style={{ flex: 1, alignItems: 'center', }}>
+                            <Text style={{ marginBottom: 10 }}>Please enable Camera Permission to scan QR code</Text>
+                            <TouchableOpacity
+                                style={styles.btn}
+                                onPress={this.getPermission}
+                            >
+                                <Text style={{ color: "#fff" }}>Enable</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                }
+
                 <BottomSheet
-                    snapPoints={["80%", "50%", 100]}
-                    renderContent={()=><SheetContent data={this.state.data}/>}
+                    ref={component => this.bottomSheet = component}
+                    snapPoints={["-80%", "50%", "80%"]}
+                    initialSnap={0}
+                    onCloseEnd={() => {
+                        this.setState({ sheetClosed: true })
+                        this.animateCorners();
+                    }}
+                    onOpenEnd={()=>{
+                        this.setState({ sheetClosed: false })
+                    }}
+                    renderHeader={() => <SheetHeader/> }
+                    renderContent={() => <SheetContent data={this.state.data} />}
+                    enabledInnerScrolling={false}
+                    enabledContentGestureInteraction
                 />
             </View>
         );
@@ -126,7 +161,7 @@ const styles = StyleSheet.create({
     },
     camera: {
         width: width,
-        height: height * 0.90,
+        height: height * 0.80,
         backgroundColor: "red",
         borderRadius: 100
     },
@@ -142,5 +177,10 @@ const styles = StyleSheet.create({
     },
     details: {
         padding: 5,
+    },
+    btn: {
+        backgroundColor: "#000",
+        padding: 10,
+        borderRadius: 3
     }
 })
