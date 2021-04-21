@@ -1,7 +1,10 @@
+import axios from 'axios';
 import { BarCodeScanner } from 'expo-barcode-scanner';
 import { Camera } from 'expo-camera';
 import React, { Component } from 'react';
-import { View, Text, StyleSheet, Dimensions, Image, Modal, Animated } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Modal, Animated, Easing, Image } from 'react-native';
+import BottomSheet from 'reanimated-bottom-sheet';
+import SheetContent from './SheetContent';
 
 const { width, height } = Dimensions.get("window");
 
@@ -12,6 +15,7 @@ export default class Scanner extends Component {
             permission: false,
             detailsModal: false,
             opacity: new Animated.Value(1),
+            data: []
         };
     }
 
@@ -20,24 +24,24 @@ export default class Scanner extends Component {
             Animated.timing(this.state.opacity, {
                 toValue: 0,
                 duration: 800,
-                useNativeDriver:false
+                useNativeDriver: false,
             }),
             Animated.delay(500),
             Animated.timing(this.state.opacity, {
                 toValue: 1,
                 duration: 800,
-                useNativeDriver:false
+                useNativeDriver: false
             })
         ]).start((data) => {
-            if(data.finished)
-            this.animateCorners();
+            if (data.finished)
+                this.animateCorners();
         });
     }
 
-    stopAnimation=()=>{
+    stopAnimation = () => {
         this.state.opacity.setValue(1);
         this.state.opacity.stopAnimation();
-        this.setState({detailsModal:true});
+        this.setState({ detailsModal: true });
     }
 
     async componentDidMount() {
@@ -51,16 +55,29 @@ export default class Scanner extends Component {
         this.animateCorners();
     }
 
-    getDetails = () => {
+    getDetails = async () => {
+        try {
+            var result = await axios.get("https://randomuser.me/api/?seed=%7Bbarcode-number");
+            if (result.data && result.data.results.length > 0) {
+                this.setState({ data: result.data.results[0] })
+            }
+            else {
+                alert("Can't find the product")
+            }
+        } catch (error) {
+            alert("Error occured")
+        }
 
     }
+
+
 
 
     render() {
         var { opacity } = this.state;
         return (
             <View style={styles.container}>
-                <View style={{ flex: 1, justifyContent: "center", alignItems: 'center', }}>
+                <View style={styles.head}>
                     <Text style={styles.heading}>
                         Scan QR code
                 </Text>
@@ -73,25 +90,19 @@ export default class Scanner extends Component {
                                 type="back"
                                 onBarCodeScanned={(result) => {
                                     this.stopAnimation();
-                                    console.warn(result)
                                 }}
                             >
                                 <View style={styles.imgContainer}>
-                                    <Animated.Image source={require("../assets/corners.png")} style={[styles.img, { opacity,tintColor:this.state.detailsModal?"green":"#fff" }]} />
+                                    <Animated.Image source={require("../assets/corners.png")} style={[styles.img, { opacity, tintColor: this.state.detailsModal ? "green" : "#fff" }]} />
                                 </View>
                             </Camera> :
                             <Text>Please enable camera permission to scan qr code</Text>
                     }
                 </View>
-                {/* <Modal
-                    visible={this.state.detailsModal}
-                    onRequestClose={() => this.setState({ detailsModal: false })}
-                    animationType="slide"
-                >
-                    <View style={{ flex: 1 }}>
-
-                    </View>
-                </Modal> */}
+                <BottomSheet
+                    snapPoints={["80%", "50%", 100]}
+                    renderContent={()=><SheetContent data={this.state.data}/>}
+                />
             </View>
         );
     }
@@ -102,6 +113,11 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: "#fff",
+    },
+    head: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: 'center',
     },
     heading: {
         fontSize: 20,
@@ -123,5 +139,8 @@ const styles = StyleSheet.create({
         flex: 1,
         width: "90%",
         resizeMode: "contain",
+    },
+    details: {
+        padding: 5,
     }
 })
